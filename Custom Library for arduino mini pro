@@ -1,0 +1,121 @@
+#ifndef LiquidCrystal_I2C_soft_h
+#define LiquidCrystal_I2C_soft_h
+
+#include <Arduino.h>
+#include <SoftwareWire.h>
+
+class LiquidCrystal_I2C {
+private:
+  SoftwareWire* _wire;
+  uint8_t _addr;
+  uint8_t _backlight;
+
+  void expanderWrite(uint8_t data) {
+    _wire->beginTransmission(_addr);
+    _wire->write(data | _backlight);
+    _wire->endTransmission();
+  }
+
+  void pulseEnable(uint8_t data) {
+    expanderWrite(data | 0x04);
+    delayMicroseconds(1);
+    expanderWrite(data & ~0x04);
+    delayMicroseconds(50);
+  }
+
+  void write4bits(uint8_t value) {
+    expanderWrite(value);
+    pulseEnable(value);
+  }
+
+  void send(uint8_t value, uint8_t mode) {
+    uint8_t high = value & 0xF0;
+    uint8_t low  = (value << 4) & 0xF0;
+
+    write4bits(high | mode);
+    write4bits(low | mode);
+  }
+
+public:
+  LiquidCrystal_I2C(SoftwareWire* wire, uint8_t addr) {
+    _wire = wire;
+    _addr = addr;
+    _backlight = 0x08;
+  }
+
+  void init() {
+    _wire->begin();
+
+    delay(50);
+
+    write4bits(0x30);
+    delay(5);
+
+    write4bits(0x30);
+    delayMicroseconds(150);
+
+    write4bits(0x30);
+    write4bits(0x20);
+
+    command(0x28); // 4-bit, 2-line
+    command(0x0C); // display on
+    command(0x06); // entry mode
+    command(0x01); // clear
+    delay(2);
+  }
+
+  void command(uint8_t value) {
+    send(value, 0);
+  }
+
+  void write(uint8_t value) {
+    send(value, 1);
+  }
+
+  void print(const char* str) {
+    while (*str) {
+      write(*str++);
+    }
+  }
+
+  void print(int num) {
+    char buf[8];
+    itoa(num, buf, 10);
+    print(buf);
+  }
+
+  void clear() {
+    command(0x01);
+    delay(2);
+  }
+
+  void home() {
+    command(0x02);
+    delay(2);
+  }
+
+  void setCursor(uint8_t col, uint8_t row) {
+    const uint8_t row_offsets[] = {0x00, 0x40};
+    command(0x80 | (col + row_offsets[row]));
+  }
+
+  void scrollDisplayLeft() {
+    command(0x18);
+  }
+
+  void scrollDisplayRight() {
+    command(0x1C);
+  }
+
+  void backlight() {
+    _backlight = 0x08;
+    expanderWrite(0);
+  }
+
+  void noBacklight() {
+    _backlight = 0x00;
+    expanderWrite(0);
+  }
+};
+
+#endif
